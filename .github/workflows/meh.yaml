@@ -39,3 +39,4 @@ jobs:
           bash setup.sh
           
           bash dumper.sh "${{ inputs.firmware_link }}"
+          bash git.sh
