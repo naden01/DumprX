@@ -23,25 +23,11 @@ jobs:
 
       - name: Setup DumprX
         env:
-          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
-          GITLAB_ORG: ${{ secrets.GITLAB_ORG }}
-          TG_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TG_CHAT: ${{ secrets.TELEGRAM_CHAT }}
         run: |
           git clone https://github.com/ramabondanp/DumprX
           cd DumprX
-          
-          echo "$GITLAB_TOKEN" > .gitlab_token
-          echo "$GITLAB_ORG" > .GIT_ORG
-          echo "$TG_TOKEN" > .tg_token
-          echo "$TG_CHAT" > .tg_chat
-          
+
           bash setup.sh
           
           bash dumper.sh "${{ inputs.firmware_link }}"
           
-        continue-on-error: true
-
-      - name: Setup DumprX
-        run: |
-          bash git.sh
