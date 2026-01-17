@@ -31,9 +31,14 @@ jobs:
           ssh -T git@gitlab.com
           
       - name: Setup DumprX
+        env:
+          GL_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          TG_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         run: |
           git clone https://github.com/ramabondanp/DumprX
           cd DumprX
+          sed -i "s|\$GITLAB_TOKEN|$GL_TOKEN|g" .dumprxenv
+          sed -i "s|\$TELEGRAM_TOKEN|$TG_TOKEN|g" .dumprxenv
           bash setup.sh
           neofetch && df -h
           sudo mkdir /mnt/dump /tmp/out
