@@ -31,18 +31,9 @@ jobs:
           ssh -T git@gitlab.com
           
       - name: Setup DumprX
-        env:
-          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
-          GITLAB_ORG: ${{ secrets.GITLAB_ORG }}
-          TG_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TG_CHAT: ${{ secrets.TELEGRAM_CHAT }}
         run: |
           git clone https://github.com/ramabondanp/DumprX
           cd DumprX
-          echo "$GITLAB_ORG" > .GITLAB_ORG
-          echo "$GITLAB_TOKEN" > .gitlab_token
-          echo "$TELEGRAM_TOKEN" > .tg_token
-          echo "$TELEGRAM_CHAT_ID" > .tg_chat
           bash setup.sh
           neofetch && df -h
           sudo mkdir /mnt/dump /tmp/out
