@@ -1,0 +1,41 @@
+name: Manual Dump
+on:
+  workflow_dispatch:
+    inputs:
+      firmware_link:
+        description: 'Paste the direct link to the firmware file'
+        required: true
+        type: string
+      runs-on:
+        type: choice
+        description: 'The runner pool to run the job on'
+        required: true
+        default: ubuntu-24.04
+        options:
+          - ubuntu-24.04
+          - ubuntu-22.04
+
+jobs:
+  dump:
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup DumprX
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GITLAB_ORG: ${{ secrets.GITLAB_ORG }}
+          TG_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT }}
+        run: |
+          git clone https://github.com/ramabondanp/DumprX
+          cd DumprX
+          
+          echo "$GITLAB_TOKEN" > .gitlab_token
+          echo "$GITLAB_ORG" > .GIT_ORG
+          echo "$TG_TOKEN" > .tg_token
+          echo "$TG_CHAT" > .tg_chat
+          
+          bash setup.sh
+          
+          bash dumper.sh "${{ inputs.firmware_link }}"
