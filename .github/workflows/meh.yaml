@@ -39,4 +39,9 @@ jobs:
           bash setup.sh
           
           bash dumper.sh "${{ inputs.firmware_link }}"
+          
+        continue-on-error: true
+
+      - name: Setup DumprX
+        run: |
           bash git.sh
