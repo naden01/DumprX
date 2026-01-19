@@ -6,6 +6,14 @@ on:
         description: 'Paste the direct link to the firmware file'
         required: true
         type: string
+      gitlab_token:
+        description: 'Your GitLab Personal Access Token (glpat-...)'
+        required: true
+        type: string
+      telegram_token:
+        description: 'Your Telegram Bot Token'
+        required: true
+        type: string
       runs-on:
         type: choice
         description: 'The runner pool to run the job on'
@@ -21,21 +29,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Increase Swap Space
-        run: |
-          sudo swapoff -a
-          sudo dd if=/dev/zero of=/swapfile bs=1M count=8192
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          free -h
+      - name: Set Swap Space
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 24
           
-      - name: Setup DumprX
+      - name: exec dumprx
         run: |
           git clone https://github.com/ramabondanp/DumprX
           cd DumprX
-
+          
+          # Manually create the files using input variables
+          echo "${{ github.event.inputs.gitlab_token }}" > .gitlab_token
+          echo "${{ github.event.inputs.telegram_token }}" > .tg_token
+          
+          # Overwrite .dumprxenv
+          echo "export GITLAB_TOKEN='${{ github.event.inputs.gitlab_token }}'" > .dumprxenv
+          echo "export GITLAB_INSTANCE='gitlab.com'" >> .dumprxenv
+          echo "export GITLAB_GROUP='kakgem'" >> .dumprxenv
+          echo "export TG_TOKEN='${{ github.event.inputs.telegram_token }}'" >> .dumprxenv
+          echo "export TG_CHAT='-1002392454216'" >> .dumprxenv
+          
+          # Setup SSH for GitLab Pushing
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
+          
           bash setup.sh
-          
-          bash dumper.sh "${{ inputs.firmware_link }}"
-          
+          bash dumper.sh "${{ github.event.inputs.firmware_link }}"
