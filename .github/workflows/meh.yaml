@@ -6,6 +6,11 @@ on:
         description: 'Paste the direct link to the firmware file'
         required: true
         type: string
+      git_instance:
+        description: 'Which git'
+        required: true
+        default: 'gitlab.com'
+        type: string
       gitlab_token:
         description: 'Your GitLab Personal Access Token (glpat-...)'
         required: true
@@ -36,16 +41,12 @@ jobs:
           
       - name: exec dumprx
         run: |
-          git clone https://github.com/ramabondanp/DumprX
+          git clone https://github.com/naden01/DumprX
           cd DumprX
-          
-          # Manually create the files using input variables
-          echo "${{ github.event.inputs.gitlab_token }}" > .gitlab_token
-          echo "${{ github.event.inputs.telegram_token }}" > .tg_token
           
           # Overwrite .dumprxenv
           echo "export GITLAB_TOKEN='${{ github.event.inputs.gitlab_token }}'" > .dumprxenv
-          echo "export GITLAB_INSTANCE='gitlab.com'" >> .dumprxenv
+          echo "export GITLAB_INSTANCE='${{ github.event.inputs.git_instance }}'" >> .dumprxenv
           echo "export GITLAB_GROUP='kakgem'" >> .dumprxenv
           echo "export TG_TOKEN='${{ github.event.inputs.telegram_token }}'" >> .dumprxenv
           echo "export TG_CHAT='-1002392454216'" >> .dumprxenv
