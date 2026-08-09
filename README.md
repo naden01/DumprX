@@ -95,6 +95,15 @@ GitHub mode works like GitLab mode but pushes to github.com instead:
 > codename with a `_dump` suffix, keeping its original casing (e.g.
 > `Infinix-X6878_dump`) under `GITHUB_ORG` or your personal account.
 
+### Via CI (GitHub Actions)
+
+The `dump` workflow has a **target** input (`gitlab` or `github`). When you pick
+`github`, set these secrets (Settings → Secrets):
+
+- `GITHUB_TOKEN` — PAT used to create the repo via the GitHub API.
+- `GITHUB_SSH_KEY` — private key registered on the target GitHub account (the dump is pushed over SSH).
+- `GITHUB_ORG` *(optional)* — if set, repos are created under this org; otherwise your personal account is used.
+
 ## Main Scripture Credit
 
 As mentioned above, this toolkit is entirely focused on improving the Original Firmware Dumper available:  [Dumpyara](https://github.com/AndroidDumps/) [Phoenix Firmware Dumper](https://github.com/DroidDumps)
