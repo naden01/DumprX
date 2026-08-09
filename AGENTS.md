@@ -90,12 +90,19 @@ Known runtime clones include:
 Options:
   -p, --push-only             Push only; skip extraction
   -r, --readme-only           Generate README.md only; skip extraction
-  -m, --mode <local|gitlab>   Choose output mode
+  -m, --mode <local|gitlab|github>   Choose output mode
   -g, --gitlab                Shortcut for --mode gitlab
+  -b, --github                Shortcut for --mode github
   -l, --local                 Shortcut for --mode local
-      --public                Create GitLab repo as public; default is private
+      --public                Create repo as public; default is private
   -h, --help                  Show help
 ```
+
+Note: In GitHub mode, the push helpers (`retry_push`, `push_lfs_objects`,
+`commit_and_push`) are shared with GitLab mode. GitHub has no nested namespaces,
+so each dump maps to a single repo named after the codename with a `_dump`
+suffix and the original casing preserved (e.g. `Infinix-X6878_dump`) under
+`GITHUB_ORG` (or your personal account).
 
 Current code initializes `MODE="gitlab"` while the help text may mention local as default. Verify actual code before changing behavior or docs.
 
@@ -108,8 +115,8 @@ Current code initializes `MODE="gitlab"` while the help text may mention local a
 | `UTILSDIR` | Helper scripts and binaries |
 | `OUTDIR` | Final extracted output, currently `/tmp/out` |
 | `WORK_TMPDIR` | Temporary work directory under `/tmp/out/tmp` |
-| `MODE` | `local` or `gitlab` output behavior |
-| `REPO_VISIBILITY` | GitLab repo visibility; `private` by default, `public` with `--public` |
+| `MODE` | `local`, `gitlab`, or `github` output behavior |
+| `REPO_VISIBILITY` | Repo visibility; `private` by default, `public` with `--public` |
 | `PUSH_ONLY` | Skip extraction and push existing output |
 | `README_ONLY` | Generate README only |
 
@@ -188,6 +195,15 @@ git lfs push --object-id origin "$oid"
 ```
 
 Using `retry_push lfs push ...` would become the wrong command (`git push lfs push ...`) and may also fail because shell functions are not exported into the `bash -c` worker.
+
+### LFS thresholds
+
+`commit_and_push()` tracks large files with `git lfs track` before adding partitions:
+
+- GitLab mode: files larger than `+100M`.
+- GitHub mode: files larger than `+50M` (GitHub's recommended limit) and the tracking
+  patterns are always (re)generated so a reused `OUTDIR` still picks up files between
+  50 MB and 100 MB.
 
 ## Shell Style Guidelines
 

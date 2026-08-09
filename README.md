@@ -73,6 +73,28 @@ To automatically push your firmware dumps to a GitLab repository (default mode) 
    - `TG_TOKEN`: Optional Telegram bot token to send status messages.
    - `TG_CHAT`: Optional Telegram chat/channel ID (defaults to `@DumprXDumps`).
 
+## How to use it to Upload the Dump to GitHub
+
+GitHub mode works like GitLab mode but pushes to github.com instead:
+
+1. In `.dumprxenv`, set:
+   - `GITHUB_TOKEN`: Your GitHub personal access token (fine-grained or classic PAT) used to create the repo via the GitHub API.
+   - `GITHUB_ORG`: Optional GitHub organization name. If left blank, your personal account is used.
+2. Make sure your SSH key is registered on GitHub, since the dump is pushed over SSH like GitLab.
+   Files larger than 50 MB are automatically pushed via Git LFS (GitHub's recommended limit),
+   so you may need `git-lfs` installed.
+3. Run with the github mode:
+   ```bash
+   ./dumper.sh --github <firmware-file-or-url>
+   # or
+   ./dumper.sh --mode github --public <firmware-file-or-url>
+   ```
+
+> GitHub has no nested namespaces, so a dump that GitLab would store as
+> `group/manufacturer/codename` is created here as a single repo named after the
+> codename with a `_dump` suffix, keeping its original casing (e.g.
+> `Infinix-X6878_dump`) under `GITHUB_ORG` or your personal account.
+
 ## Main Scripture Credit
 
 As mentioned above, this toolkit is entirely focused on improving the Original Firmware Dumper available:  [Dumpyara](https://github.com/AndroidDumps/) [Phoenix Firmware Dumper](https://github.com/DroidDumps)

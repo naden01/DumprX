@@ -31,10 +31,11 @@ function _usage() {
 	printf "\t\e[1;32m -> OPTIONS: \e[0m\n"
 	printf "\t   -p, --push-only             Push only (Skip extraction)\n"
 	printf "\t   -r, --readme-only           Generate README.md only (Skip extraction)\n"
-	printf "\t   -m, --mode <local|gitlab>   Choose output mode (default: local)\n"
+	printf "\t   -m, --mode <local|gitlab|github>   Choose output mode (default: local)\n"
 	printf "\t   -g, --gitlab                Shortcut for --mode gitlab\n"
+	printf "\t   -b, --github                Shortcut for --mode github\n"
 	printf "\t   -l, --local                 Shortcut for --mode local\n"
-	printf "\t   --public                    Create GitLab repo as public (default: private)\n"
+	printf "\t   --public                    Create repo as public (default: private)\n"
 	printf "\t   -h, --help                  Show this help and exit\n\n"
 
 	printf " \e[1;34m >> Supported Websites: \e[0m\n"
@@ -69,6 +70,8 @@ while [[ $# -gt 0 ]]; do
 			MODE="$2"; shift 2 ;;
 		-g|--gitlab)
 			MODE="gitlab"; shift ;;
+		-b|--github)
+			MODE="github"; shift ;;
 		-l|--local)
 			MODE="local"; shift ;;
 		--public)
@@ -1443,9 +1446,9 @@ find "$OUTDIR" -type f -printf '%P\n' | sort | grep -v ".git/" > "$OUTDIR"/all_f
 
 rm -rf "${WORK_TMPDIR}" 2>/dev/null
 
-if [[ "${MODE}" == "gitlab" ]]; then
-if [[ -n "${GITLAB_TOKEN}" ]]; then
+if [[ "${MODE}" == "gitlab" || "${MODE}" == "github" ]]; then
 
+	# Shared push helpers (used by both GitLab and GitHub modes)
 	retry_push() {
 		local attempts=0
 		local max_attempts=5
@@ -1501,9 +1504,22 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 		retry_push -f origin "${branch}" || exit 1
 
 		git lfs install
-		[ -e ".gitattributes" ] || find . -type f -not -path ".git/*" -size +100M | \
-			sed 's|.*/||' | sort -u | \
-			xargs -I{} git lfs track "{}"
+		# Track large files with LFS. GitHub recommends LFS for files larger than
+		# 50 MB (and warns otherwise), so GitHub mode uses a lower threshold.
+		lfs_size="+100M"
+		lfs_always_track=false
+		if [[ "${MODE}" == "github" ]]; then
+			# GitHub recommends LFS for files larger than 50 MB (and warns otherwise), so use a
+			# lower threshold AND always (re)generate patterns. Otherwise a reused OUTDIR with a
+			# stale .gitattributes would skip tracking files between 50 MB and 100 MB.
+			lfs_size="+50M"
+			lfs_always_track=true
+		fi
+		if [[ "${lfs_always_track}" == "true" || ! -e ".gitattributes" ]]; then
+			find . -type f -not -path ".git/*" -size "${lfs_size}" | \
+				sed 's|.*/||' | sort -u | \
+				xargs -I{} git lfs track "{}"
+		fi
 		[ -e ".gitattributes" ] && {
 			git add ".gitattributes"
 			git commit -sm "Setup Git LFS"
@@ -1530,7 +1546,10 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 		retry_push -u origin "${branch}" || exit 1
 	}
 
-	GIT_ORG="${GITLAB_GROUP}"	# Set Your Gitlab Group Name
+	if [[ "${MODE}" == "gitlab" ]]; then
+if [[ -n "${GITLAB_TOKEN}" ]]; then
+
+	GIT_ORG="${GITLAB_GROUP:-$(git config --get user.name)}"	# Set Your Gitlab Group Name
 
 	# Gitlab Vars
 	# GITLAB_TOKEN is already sourced from .dumprxenv
@@ -1600,7 +1619,7 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 	# NOTE: Your SSH Keys Needs to be Added to your Gitlab Instance
 	git remote add origin "git@${GITLAB_INSTANCE}:${GIT_ORG}/${repo}.git"
 
-# Ensure the target repo visibility
+	# Ensure the target repo visibility
 	REPO_DESC="${codename}"
 	[[ -n "${transname}" ]] && REPO_DESC="${transname}"
 	curl --request PUT --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" --url "${GITLAB_HOST}/api/v4/projects/${PROJECT_ID}" --data "visibility=${REPO_VISIBILITY}" --data-urlencode "description=${REPO_DESC}"
@@ -1616,41 +1635,145 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 		--data "default_branch=${branch}"
 	printf "\n"
 
-	# Telegram channel post
-	if [[ -n "${TG_TOKEN}" ]]; then
-		if [[ -n "${TG_CHAT}" ]]; then		# TG Channel ID
-			CHAT_ID="${TG_CHAT}"
-		else
-			CHAT_ID="@DumprXDumps"
-		fi
-		printf "Sending telegram notification...\n"
-		printf "<blockquote><b>FIRMWARE DUMP INFO</b></blockquote>" >| "${OUTDIR}"/tg.html
-		{
-			[ ! -z "${transname}" ] && printf "\n<b>Transsion name: %s</b>" "<code>${transname}</code>"
-			[ ! -z "${xiaominame}" ] && printf "\n<b>Xiaomi name: %s</b>" "<code>${xiaominame}</code>"
-			[ ! -z "${motoname}" ] && printf "\n<b>Moto name: %s</b>" "<code>${motoname}</code>"
-			[ ! -z "${opname}" ] && printf "\n<b>OP name: %s</b>" "<code>${opname}</code>"
-			[ ! -z "${xosid}" ] && printf "\n<b>TranOS build: %s</b>" "<code>${xosid}</code>"
-			[ ! -z "${xosver}" ] && printf "\n<b>TranOS ver: %s</b>" "<code>${xosver}</code>"
-			printf "\n<b>Brand: %s</b>" "<code>${manufacturer}</code>"
-			printf "\n<b>Model: %s</b>" "<code>${codename}</code>"
-			printf "\n<b>Platform: %s</b>" "<code>${platform}${ts_chipset}</code>"
-			printf "\n<b>Android build: %s</b>" "<code>${id}</code>"
-			printf "\n<b>Android ver: %s</b>" "<code>${release}</code>"
-			[ ! -z "${kernel_version}" ] && printf "\n<b>Kernel ver: %s</b>" "<code>${kernel_version}</code>"
-			printf "\n<b>Security patch: %s</b>" "<code>${sec_patch}</code>"
-			printf "\n<b>Fingerprint: %s</b>" "<code>${fingerprint}</code>"
-			printf "\n<a href=\"${GITLAB_HOST}/%s/%s/-/tree/%s/\">Gitlab Tree</a>" "${GIT_ORG}" "${repo}" "${branch}"
-		} >> "${OUTDIR}"/tg.html
-		TEXT=$(< "${OUTDIR}"/tg.html)
-		rm -rf "${OUTDIR}"/tg.html
-		curl -s "https://api.telegram.org/bot${TG_TOKEN}/sendmessage" --data "text=${TEXT}&chat_id=${CHAT_ID}&parse_mode=HTML&disable_web_page_preview=True" || printf "Telegram Notification Sending Error.\n"
-	fi
+	# Tree link used by the shared Telegram notification below
+	REPO_TREE_URL="${GITLAB_HOST}/${GIT_ORG}/${repo}/-/tree/${branch}/"
+	REPO_TREE_LABEL="GitLab Tree"
 
 else
 	printf "GitLab mode selected but gitlab token is missing.\n"
 	exit 1
 fi
+elif [[ "${MODE}" == "github" ]]; then
+if [[ -n "${GITHUB_TOKEN}" ]]; then
+
+	# GitHub Vars
+	# GITHUB_TOKEN is already sourced from .dumprxenv
+	GH_API="https://api.github.com"
+	if [[ -n "${GITHUB_ORG}" ]]; then
+		GIT_ORG="${GITHUB_ORG}"
+	else
+		GH_AUTH_JSON="$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" "${GH_API}/user")"
+		GIT_ORG="$(printf '%s' "${GH_AUTH_JSON}" | jq -r '.login')"
+		if [[ -z "${GIT_ORG}" || "${GIT_ORG}" == "null" ]]; then
+			printf "Error: GitHub authentication failed. API says: %s\n" "$(printf '%s' "${GH_AUTH_JSON}" | jq -r '.message // "could not resolve user from GITHUB_TOKEN"' 2>/dev/null)"
+			printf "Check GITHUB_TOKEN in %s/.dumprxenv — it may be expired, revoked, or mistyped.\n" "${PROJECT_DIR}"
+			exit 1
+		fi
+	fi
+	[[ -z "${GIT_ORG}" || "${GIT_ORG}" == "null" ]] && { printf "Error: Could not determine GitHub user/org from GITHUB_TOKEN/GITHUB_ORG\n"; exit 1; }
+
+	# GitHub has no nested namespaces, so each dump maps to a single repo.
+	# Keep the codename's original casing and append a "_dump" suffix (spaces -> "-").
+	GH_REPO="$(printf "%s_dump" "${codename}" | tr ' ' '-')"
+
+	# Shared repo description (GitHub equivalent)
+	REPO_DESC="${codename}"
+	[[ -n "${transname}" ]] && REPO_DESC="${transname}"
+
+	# GitHub visibility -> private boolean + visibility string
+	if [[ "${REPO_VISIBILITY}" == "public" ]]; then
+		GH_VISIBILITY="public"
+		GH_PRIVATE="false"
+	else
+		GH_VISIBILITY="private"
+		GH_PRIVATE="true"
+	fi
+
+	# Check if already dumped or not
+	[[ $(curl -sL "https://raw.githubusercontent.com/${GIT_ORG}/${GH_REPO}/${branch}/all_files.txt" | grep "all_files.txt") ]] && { printf "Firmware already dumped!\nGo to https://github.com/%s/%s/tree/%s\n" "${GIT_ORG}" "${GH_REPO}" "${branch}" && exit 1; }
+
+	# Remove The Journal File Inside System/Vendor
+	find . -mindepth 2 -type d -name "\[SYS\]" -exec rm -rf {} \; 2>/dev/null
+	printf "\nFinal Repository Should Look Like...\n" && ls -lAog
+	printf "\n\nStarting Git Init...\n"
+
+	git init		# Ensure your GitHub authorization before running this script
+	git config http.postBuffer 524288000		# Local config only — avoids mutating user's global git config
+	git checkout -b "${branch}" || { git checkout -b "${incremental}" && export branch="${incremental}"; }
+	find . \( -name "*sensetime*" -o -name "*.lic" \) | cut -d'/' -f'2-' >| .gitignore
+	[[ ! -s .gitignore ]] && rm .gitignore
+	[[ -z "$(git config --get user.email)" ]] && git config user.email "ramanarubp@gmail.com"
+	[[ -z "$(git config --get user.name)" ]] && git config user.name "Rama Bondan Prakoso"
+
+	# Create Repository (org-owned if GITHUB_ORG is set, otherwise a personal repo)
+	if [[ -n "${GITHUB_ORG}" ]]; then
+		curl -s -X POST \
+			-H "Authorization: token ${GITHUB_TOKEN}" \
+			-A "DumprX" \
+			-d '{"name":"'"${GH_REPO}"'","description":"'"${REPO_DESC}"'","visibility":"'"${GH_VISIBILITY}"'","private":'"${GH_PRIVATE}"',"has_wiki":false,"has_projects":false}' \
+			"${GH_API}/orgs/${GIT_ORG}/repos" > /dev/null
+	else
+		curl -s -X POST \
+			-H "Authorization: token ${GITHUB_TOKEN}" \
+			-A "DumprX" \
+			-d '{"name":"'"${GH_REPO}"'","description":"'"${REPO_DESC}"'","visibility":"'"${GH_VISIBILITY}"'","private":'"${GH_PRIVATE}"',"has_wiki":false,"has_projects":false}' \
+			"${GH_API}/user/repos" > /dev/null
+	fi
+
+	# Commit and Push via SSH
+	# NOTE: Your SSH Keys Needs to be Added to your GitHub account
+	git remote add origin "git@github.com:${GIT_ORG}/${GH_REPO}.git"
+
+	# Ensure the target repo description & visibility
+	curl -s -X PATCH \
+		-H "Authorization: token ${GITHUB_TOKEN}" \
+		-A "DumprX" \
+		-d '{"description":"'"${REPO_DESC}"'","visibility":"'"${GH_VISIBILITY}"'"}' \
+		"${GH_API}/repos/${GIT_ORG}/${GH_REPO}" > /dev/null
+	printf "\n"
+
+	printf "\nPushing to %s via SSH...\nBranch:%s\n" "https://github.com/${GIT_ORG}/${GH_REPO}.git" "${branch}"
+	commit_and_push
+
+	# Set the Default Branch
+	curl -s -X PATCH \
+		-H "Authorization: token ${GITHUB_TOKEN}" \
+		-A "DumprX" \
+		-d "{\"default_branch\":\"${branch}\"}" \
+		"${GH_API}/repos/${GIT_ORG}/${GH_REPO}" > /dev/null
+	printf "\n"
+
+	# Tree link used by the shared Telegram notification below
+	REPO_TREE_URL="https://github.com/${GIT_ORG}/${GH_REPO}/tree/${branch}/"
+	REPO_TREE_LABEL="GitHub Tree"
+
+else
+	printf "GitHub mode selected but github token is missing.\n"
+	exit 1
+fi
+fi
+
+# Telegram channel post (shared by GitLab and GitHub modes once a push succeeded)
+	if [[ -n "${TG_TOKEN}" ]]; then
+	if [[ -n "${TG_CHAT}" ]]; then		# TG Channel ID
+		CHAT_ID="${TG_CHAT}"
+	else
+		CHAT_ID="@DumprXDumps"
+	fi
+	printf "Sending telegram notification...\n"
+	printf "<blockquote><b>FIRMWARE DUMP INFO</b></blockquote>" >| "${OUTDIR}"/tg.html
+	{
+		[ ! -z "${transname}" ] && printf "\n<b>Transsion name: %s</b>" "<code>${transname}</code>"
+		[ ! -z "${xiaominame}" ] && printf "\n<b>Xiaomi name: %s</b>" "<code>${xiaominame}</code>"
+		[ ! -z "${motoname}" ] && printf "\n<b>Moto name: %s</b>" "<code>${motoname}</code>"
+		[ ! -z "${opname}" ] && printf "\n<b>OP name: %s</b>" "<code>${opname}</code>"
+		[ ! -z "${xosid}" ] && printf "\n<b>TranOS build: %s</b>" "<code>${xosid}</code>"
+		[ ! -z "${xosver}" ] && printf "\n<b>TranOS ver: %s</b>" "<code>${xosver}</code>"
+		printf "\n<b>Brand: %s</b>" "<code>${manufacturer}</code>"
+		printf "\n<b>Model: %s</b>" "<code>${codename}</code>"
+		printf "\n<b>Platform: %s</b>" "<code>${platform}${ts_chipset}</code>"
+		printf "\n<b>Android build: %s</b>" "<code>${id}</code>"
+		printf "\n<b>Android ver: %s</b>" "<code>${release}</code>"
+		[ ! -z "${kernel_version}" ] && printf "\n<b>Kernel ver: %s</b>" "<code>${kernel_version}</code>"
+		printf "\n<b>Security patch: %s</b>" "<code>${sec_patch}</code>"
+		printf "\n<b>Fingerprint: %s</b>" "<code>${fingerprint}</code>"
+		[ ! -z "${REPO_TREE_URL}" ] && printf "\n<a href=\"%s\">%s</a>" "${REPO_TREE_URL}" "${REPO_TREE_LABEL:-Repository Tree}"
+	} >> "${OUTDIR}"/tg.html
+	TEXT=$(< "${OUTDIR}"/tg.html)
+	rm -rf "${OUTDIR}"/tg.html
+	curl -s "https://api.telegram.org/bot${TG_TOKEN}/sendmessage" --data "text=${TEXT}&chat_id=${CHAT_ID}&parse_mode=HTML&disable_web_page_preview=True" || printf "Telegram Notification Sending Error.\n"
+fi
+
 else
 	printf "Dumping done locally.\n"
 	exit
