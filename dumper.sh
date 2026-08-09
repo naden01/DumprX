@@ -264,7 +264,7 @@ if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 	my_preload my_odm my_stock my_operator my_country my_product my_company
 	my_engineering my_heytap my_custom my_manifest my_carrier my_region
 	my_bigball my_version
-	tr_product tr_region tr_carrier tr_mi tr_preload tr_company
+	tr_product tr_region tr_carrier tr_mi tr_preload tr_company tr_system
 	tr_overlayfs tr_theme tr_manifest tr_misc
 	preas preavs reserve version nt_log socko india
 	"
