@@ -181,7 +181,7 @@ jobs:
             sudo rm -f "$apk"
           done
           # Remove empty directories (abaikan folder lost+found)
-          sudo find /tmp/out -name "lost+found" -prune -o -type d -empty -delete
+          sudo find /tmp/out -type d -empty ! -path "*/lost+found*" -delete
           df -h /tmp/out | tail -1
 
       - name: Push firmware
