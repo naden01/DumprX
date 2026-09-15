@@ -154,14 +154,23 @@ prop_get() {
     local key="$1"
     local dir="$2"
     
-    
-    find "${dir}" -type f \( -name "build*.prop" -o -name "default.prop" \) 2>/dev/null | xargs -r grep -m1 -oP "(?<=^${key}=).*" -hs 2>/dev/null | head -1
+    find "${dir}" -type f \( -name "build*.prop" -o -name "default.prop" \) 2>/dev/null | \
+    xargs -r grep -m1 -oP "(?<=^${key}=).*" -hs 2>/dev/null | head -1
 }
 
 # if
 MANUFACTURER="${MANUFACTURER:-generic}"
 BRAND="${BRAND:-generic}"
-MODEL="${MODEL:-generic}"
+MODEL="${MODEL:-unknown_device}"
+
+MANUFACTURER=$(echo "$MANUFACTURER" | tr -cd 'a-zA-Z0-9_-' | tr '[:upper:]' '[:lower:]')
+BRAND=$(echo "$BRAND" | tr -cd 'a-zA-Z0-9_-' | tr '[:upper:]' '[:lower:]')
+MODEL=$(echo "$MODEL" | tr -cd 'a-zA-Z0-9_-' | tr '[:upper:]' '[:lower:]')
+
+[ -z "$MANUFACTURER" ] && MANUFACTURER="generic"
+[ -z "$MODEL" ] && MODEL="unknown_device"
+
+TARGET_BRANCH="${MANUFACTURER}-${MODEL}"
 
 # Helper: Override variable only if a new value is found
 # Usage: prop_override varname "key:files" ...
@@ -1562,7 +1571,7 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 
 	git init		# Ensure Your GitLab Authorization Before Running This Script
 	git config http.postBuffer 524288000		# Local config only — avoids mutating user's global git config
-	git checkout -b "${branch}" || { git checkout -b "${incremental}" && export branch="${incremental}"; }
+	git checkout -b "$TARGET_BRANCH" 2>/dev/null || git checkout "$TARGET_BRANCH"
 	find . \( -name "*sensetime*" -o -name "*.lic" \) | cut -d'/' -f'2-' >| .gitignore
 	[[ ! -s .gitignore ]] && rm .gitignore
 	[[ -z "$(git config --get user.email)" ]] && git config user.email "ramanarubp@gmail.com"
@@ -1683,7 +1692,7 @@ if [[ -n "${GITHUB_TOKEN}" ]]; then
 
 	git init		# Ensure your GitHub authorization before running this script
 	git config http.postBuffer 524288000		# Local config only — avoids mutating user's global git config
-	git checkout -b "${branch}" || { git checkout -b "${incremental}" && export branch="${incremental}"; }
+	git checkout -b "$TARGET_BRANCH" 2>/dev/null || git checkout "$TARGET_BRANCH"
 	find . \( -name "*sensetime*" -o -name "*.lic" \) | cut -d'/' -f'2-' >| .gitignore
 	[[ ! -s .gitignore ]] && rm .gitignore
 	[[ -z "$(git config --get user.email)" ]] && git config user.email "ramanarubp@gmail.com"
