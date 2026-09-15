@@ -174,14 +174,14 @@ jobs:
 
       - name: Prune unnecessary data
         run: |
-          rm -rf /tmp/out/tr_region/operator/
+          sudo rm -rf /tmp/out/tr_region/operator/
           echo "Auto-detecting and deleting Google Apps..."
-          find /tmp/out -type f -name "*.apk" | grep -iE "google|gms|velvet|chrome|youtube|ytmusic|gmail|maps|photos|meet|arcore|speechservices|wellbeing|talkback|setupwizard|androidauto|partnersetup|playautoinstall|privatecompute|familylink|phonesky|trichromelibrary|captiveportallogingoogle|documentsuigoogle|networkstackgoogle" | while read -r apk; do
+          sudo find /tmp/out -type f -name "*.apk" | grep -iE "google|gms|velvet|chrome|youtube|ytmusic|gmail|maps|photos|meet|arcore|speechservices|wellbeing|talkback|setupwizard|androidauto|partnersetup|playautoinstall|privatecompute|familylink|phonesky|trichromelibrary|captiveportallogingoogle|documentsuigoogle|networkstackgoogle" | while read -r apk; do
             echo "Deleting: $apk"
-            rm -f "$apk"
+            sudo rm -f "$apk"
           done
-          # Remove now-empty directories
-          find /tmp/out -type d -empty -delete
+          # Remove empty directories (abaikan folder lost+found)
+          sudo find /tmp/out -name "lost+found" -prune -o -type d -empty -delete
           df -h /tmp/out | tail -1
 
       - name: Push firmware
