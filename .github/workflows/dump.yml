@@ -123,23 +123,21 @@ jobs:
           TG_CHAT: ${{ secrets.TG_CHAT }}
         run: |
           if [[ "${{ inputs.target }}" == "github" ]]; then
-            cat > .dumprxenv <<EOF
-            export GITHUB_TOKEN="${GITHUB_TOKEN}"
-            export GITHUB_ORG="${GITHUB_ORG}"
-            export TG_TOKEN="${TG_TOKEN}"
-            export TG_CHAT="${TG_CHAT}"
-            EOF
+            {
+              echo "export GITHUB_TOKEN=\"${GITHUB_TOKEN}\""
+              echo "export GITHUB_ORG=\"${GITHUB_ORG}\""
+              echo "export TG_TOKEN=\"${TG_TOKEN}\""
+              echo "export TG_CHAT=\"${TG_CHAT}\""
+            } > .dumprxenv
           else
-            cat > .dumprxenv <<EOF
-            export GITLAB_TOKEN="${GITLAB_TOKEN}"
-            export GITLAB_INSTANCE="${GITLAB_INSTANCE}"
-            export GITLAB_GROUP="${GITLAB_GROUP}"
-            export TG_TOKEN="${TG_TOKEN}"
-            export TG_CHAT="${TG_CHAT}"
-            EOF
+            {
+              echo "export GITLAB_TOKEN=\"${GITLAB_TOKEN}\""
+              echo "export GITLAB_INSTANCE=\"${GITLAB_INSTANCE}\""
+              echo "export GITLAB_GROUP=\"${GITLAB_GROUP}\""
+              echo "export TG_TOKEN=\"${TG_TOKEN}\""
+              echo "export TG_CHAT=\"${TG_CHAT}\""
+            } > .dumprxenv
           fi
-          # Remove leading whitespace from heredoc indentation
-          sed -i 's/^[[:space:]]*//' .dumprxenv
 
       - name: Validate inputs
         run: |
