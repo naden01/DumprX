@@ -151,23 +151,17 @@ reset_inputdir() {
 # Each argument is "property.key:file_glob [file_glob ...]"
 # Returns the first non-empty match and stops searching.
 prop_get() {
-	local entry key paths dir result
-	for entry in "$@"; do
-		key="${entry%%:*}"
-		paths="${entry#*:}"
-		for dir in $(eval echo ${paths} 2>/dev/null); do
-			if [[ -d "${dir}" ]]; then
-				# Use find to locate build*.prop in the directory or its subdirectories (like etc/)
-				result=$(find "${dir}" -maxdepth 2 -type f -name "build*.prop" 2>/dev/null | xargs -r grep -m1 -oP "(?<=^${key}=).*" -hs 2>/dev/null | head -1)
-				if [[ -n "${result}" ]]; then
-					printf '%s' "${result}"
-					return 0
-				fi
-			fi
-		done
-	done
-	return 1
+    local key="$1"
+    local dir="$2"
+    
+    
+    find "${dir}" -type f \( -name "build*.prop" -o -name "default.prop" \) 2>/dev/null | xargs -r grep -m1 -oP "(?<=^${key}=).*" -hs 2>/dev/null | head -1
 }
+
+# if
+MANUFACTURER="${MANUFACTURER:-generic}"
+BRAND="${BRAND:-generic}"
+MODEL="${MODEL:-generic}"
 
 # Helper: Override variable only if a new value is found
 # Usage: prop_override varname "key:files" ...
@@ -380,7 +374,7 @@ if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 				mv "$partition"_a.img "$partition".img
 			else
 				foundpartitions=$(echo "$ARCHIVE_LISTING" | rev | gawk '{ print $1 }' | rev | grep -E "(^|/)${partition}\.img$")
-				${BIN_7ZZ} e -y "${FILEPATH}" $foundpartitions dummypartition 2>/dev/null >> $WORK_TMPDIR/zip.log
+				${BIN_7ZZ} e -y "${FILEPATH}" ${foundpartitions} dummypartition 2>/dev/null >> "${WORK_TMPDIR}/zip.log"
 			fi
 		done
 		rm -rf super.img.raw
@@ -516,7 +510,7 @@ if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 		FILE="${WORK_TMPDIR}/$(basename "${FILEPATH}")"
 		${BIN_7ZZ} e -y "${FILEPATH}" >> "${WORK_TMPDIR}"/zip.log
 		"${AML_EXTRACT}" $(find . -type f -name "*aml*.img")
-		rename 's/.PARTITION$/.img/' *.PARTITION
+		rename 's/\.PARTITION$/\.img/' *.PARTITION 2>/dev/null || true
 		rename 's/_aml_dtb.img$/dtb.img/' *.img
 		rename 's/_a.img/.img/' *.img
 		if [[ -f super.img ]]; then
