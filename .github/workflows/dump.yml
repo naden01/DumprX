@@ -187,8 +187,14 @@ jobs:
       - name: Push firmware
         env:
           TARGET: ${{ inputs.target }}
+          # when we dont know
+          VENDOR: "Generic"
         run: |
           PUBLIC_FLAG="${{ inputs.visibility == 'public' && '--public' || '' }}"
+          
+          # Inject nilai default ke environment jika variabel manufacturer kosong
+          export MANUFACTURER="${MANUFACTURER:-Generic}"
+          
           if [[ "${TARGET}" == "github" ]]; then
             ./dumper.sh -b -p $PUBLIC_FLAG
           else
