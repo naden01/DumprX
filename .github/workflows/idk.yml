@@ -1,0 +1,204 @@
+name: DumprX – Dump Firmware & Push tmate
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Where to push the dump'
+        type: choice
+        required: true
+        default: 'gitlab'
+        options:
+          - gitlab
+          - github
+      visibility:
+        description: 'Repository visibility (GitLab or GitHub)'
+        type: choice
+        required: true
+        default: 'private'
+        options:
+          - private
+          - public
+      firmware_url:
+        description: 'Public firmware URL (overrides FIRMWARE_URL secret when set)'
+        type: string
+        required: false
+      debug_tmate:
+        description: 'Enable tmate debugging session'
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - name: Checkout DumprX
+        uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            unace unrar zip unzip p7zip-full p7zip-rar sharutils rar \
+            uudeview mpack arj cabextract device-tree-compiler liblzma-dev \
+            python3-pip brotli liblz4-tool axel gawk aria2 detox cpio \
+            rename liblz4-dev jq git-lfs rsync file libarchive-tools
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Set up SSH
+        env:
+          GITLAB_SSH_KEY: ${{ secrets.GITLAB_SSH_KEY }}
+          GITHUB_SSH_KEY: ${{ secrets.GITHUB_SSH_KEY }}
+          GITLAB_INSTANCE: ${{ secrets.GITLAB_INSTANCE || 'gitlab.com' }}
+        run: |
+          mkdir -p ~/.ssh
+          if [[ "${{ inputs.target }}" == "github" ]]; then
+            echo "${GITHUB_SSH_KEY}" > ~/.ssh/id_ed25519
+            ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null
+            echo "Configured SSH for github.com"
+          else
+            echo "${GITLAB_SSH_KEY}" > ~/.ssh/id_ed25519
+            ssh-keyscan -H "${GITLAB_INSTANCE}" >> ~/.ssh/known_hosts 2>/dev/null
+            echo "Configured SSH for ${GITLAB_INSTANCE}"
+          fi
+          chmod 600 ~/.ssh/id_ed25519
+          git config --global user.email "dumprx@github.actions"
+          git config --global user.name "DumprX CI"
+
+      - name: Verify SSH connection
+        env:
+          GITLAB_INSTANCE: ${{ secrets.GITLAB_INSTANCE || 'gitlab.com' }}
+          GITLAB_SSH_USER: ${{ secrets.GITLAB_SSH_USER || 'git' }}
+        run: |
+          if [[ "${{ inputs.target }}" == "github" ]]; then
+            HOST="github.com"
+            SSH_USER="git"
+            KEY_NAME="GITHUB_SSH_KEY"
+          else
+            HOST="${GITLAB_INSTANCE}"
+            SSH_USER="${GITLAB_SSH_USER}"
+            KEY_NAME="GITLAB_SSH_KEY"
+          fi
+          echo "Testing SSH connection to ${HOST}..."
+          if ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -T "${SSH_USER}@${HOST}" 2>&1; then
+            echo "SSH connection successful."
+          else
+            exit_code=$?
+            if [ "$exit_code" -eq 1 ]; then
+              echo "SSH connection successful (exit code 1 = remote closed)."
+            else
+              echo "::error::SSH connection to ${HOST} failed with exit code ${exit_code}."
+              echo "::error::Check that ${KEY_NAME} is a valid private key registered on your ${HOST} account."
+              exit "$exit_code"
+            fi
+          fi
+
+      - name: Write .dumprxenv
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GITLAB_INSTANCE: ${{ secrets.GITLAB_INSTANCE || 'gitlab.com' }}
+          GITLAB_GROUP: ${{ secrets.GITLAB_GROUP }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ORG: ${{ secrets.GITHUB_ORG }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT: ${{ secrets.TG_CHAT }}
+        run: |
+          if [[ "${{ inputs.target }}" == "github" ]]; then
+            {
+              echo "export GITHUB_TOKEN=\"${GITHUB_TOKEN}\""
+              echo "export GITHUB_ORG=\"${GITHUB_ORG}\""
+              echo "export TG_TOKEN=\"${TG_TOKEN}\""
+              echo "export TG_CHAT=\"${TG_CHAT}\""
+            } > .dumprxenv
+          else
+            {
+              echo "export GITLAB_TOKEN=\"${GITLAB_TOKEN}\""
+              echo "export GITLAB_INSTANCE=\"${GITLAB_INSTANCE}\""
+              echo "export GITLAB_GROUP=\"${GITLAB_GROUP}\""
+              echo "export TG_TOKEN=\"${TG_TOKEN}\""
+              echo "export TG_CHAT=\"${TG_CHAT}\""
+            } > .dumprxenv
+          fi
+
+      - name: Validate inputs
+        run: |
+          if [[ -z "${{ inputs.firmware_url }}" && -z "${{ secrets.FIRMWARE_URL }}" ]]; then
+            echo "::error::firmware_url input or FIRMWARE_URL secret is required"
+            exit 1
+          fi
+          if [[ "${{ inputs.target }}" == "github" ]]; then
+            if [[ -z "${{ secrets.GITHUB_TOKEN }}" ]]; then
+              echo "::error::GITHUB_TOKEN secret is required for github target"
+              exit 1
+            fi
+            if [[ -z "${{ secrets.GITHUB_SSH_KEY }}" ]]; then
+              echo "::error::GITHUB_SSH_KEY secret is required for github target"
+              exit 1
+            fi
+          else
+            if [[ -z "${{ secrets.GITLAB_TOKEN }}" ]]; then
+              echo "::error::GITLAB_TOKEN secret is required"
+              exit 1
+            fi
+            if [[ -z "${{ secrets.GITLAB_SSH_KEY }}" ]]; then
+              echo "::error::GITLAB_SSH_KEY secret is required"
+              exit 1
+            fi
+          fi
+
+      # --- TAMBAHAN FITUR TMATE ---
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ inputs.debug_tmate == true || failure() }}
+        with:
+          limit-access-to-actor: false
+
+      - name: Extract firmware (local mode)
+        env:
+          FIRMWARE_URL: ${{ inputs.firmware_url || secrets.FIRMWARE_URL }}
+        run: |
+          chmod +x dumper.sh
+          ./dumper.sh -l "${FIRMWARE_URL}"
+
+      - name: Prune unnecessary data
+        run: |
+          sudo rm -rf /tmp/out/tr_region/operator/
+          echo "Auto-detecting and deleting Google Apps..."
+          sudo find /tmp/out -type f -name "*.apk" | grep -iE "google|gms|velvet|chrome|youtube|ytmusic|gmail|maps|photos|meet|arcore|speechservices|wellbeing|talkback|setupwizard|androidauto|partnersetup|playautoinstall|privatecompute|familylink|phonesky|trichromelibrary|captiveportallogingoogle|documentsuigoogle|networkstackgoogle" | while read -r apk; do
+            echo "Deleting: $apk"
+            sudo rm -f "$apk"
+          done
+          sudo find /tmp/out -type d -empty ! -path "*/lost+found*" -delete
+          df -h /tmp/out | tail -1
+
+      - name: Push firmware
+        env:
+          TARGET: ${{ inputs.target }}
+          VENDOR: "Generic"
+        run: |
+          PUBLIC_FLAG="${{ inputs.visibility == 'public' && '--public' || '' }}"
+          export MANUFACTURER="${MANUFACTURER:-Generic}"
+          
+          if [[ "${{ inputs.target }}" == "github" ]]; then
+            ./dumper.sh -b -p $PUBLIC_FLAG
+          else
+            ./dumper.sh -g -p $PUBLIC_FLAG
+          fi
