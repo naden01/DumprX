@@ -53,10 +53,10 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
-            unace unrar zip unzip p7zip-full p7zip-rar sharutils rar \
-            uudeview mpack arj cabextract device-tree-compiler liblzma-dev \
-            python3-pip brotli liblz4-tool axel gawk aria2 detox cpio \
-            rename liblz4-dev jq git-lfs rsync file libarchive-tools
+          unace unrar zip unzip p7zip-full sharutils rar \
+          uudeview mpack arj cabextract device-tree-compiler liblzma-dev \
+          python3-pip brotli lz4 axel gawk aria2 detox cpio \
+          rename liblz4-dev jq git-lfs rsync file libarchive-tools
 
       - name: Install uv
         run: |
