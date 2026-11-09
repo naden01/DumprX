@@ -56,7 +56,7 @@ jobs:
           unace unrar zip unzip p7zip-full sharutils rar \
           uudeview mpack arj cabextract device-tree-compiler liblzma-dev \
           python3-pip brotli lz4 axel gawk aria2 detox cpio \
-          rename liblz4-dev jq git-lfs rsync file libarchive-tools
+          rename liblz4-dev jq git-lfs rsync file libarchive-tools zstd
 
       - name: Install uv
         run: |

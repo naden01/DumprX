@@ -57,7 +57,7 @@ if [[ "$OSTYPE" == "linux-gnu" || "$OSTYPE" == "linux-musl" ]]; then
 	    sleep 1
 	    echo -e ${BLUE}">> Installing Required Packages..."${NORMAL}
 	    sleep 1
-        ${SUDO} apt install -y unace unrar zip unzip p7zip-full p7zip-rar sharutils rar uudeview mpack arj cabextract device-tree-compiler liblzma-dev python3-pip brotli liblz4-tool axel gawk aria2 detox cpio rename liblz4-dev jq git-lfs rsync neofetch file apktool libarchive-tools || abort "Setup Failed!"
+        ${SUDO} apt install -y unace unrar zip unzip p7zip-full p7zip-rar sharutils rar uudeview mpack arj cabextract device-tree-compiler liblzma-dev python3-pip brotli liblz4-tool axel gawk aria2 detox cpio rename liblz4-dev jq git-lfs rsync neofetch file apktool libarchive-tools zstd || abort "Setup Failed!"
 
     elif command -v dnf > /dev/null 2>&1; then
 
@@ -67,7 +67,7 @@ if [[ "$OSTYPE" == "linux-gnu" || "$OSTYPE" == "linux-musl" ]]; then
 	    sleep 1
 
 	    # "dnf" automatically updates repos before installing packages
-        ${SUDO} dnf install -y unace unrar zip unzip sharutils uudeview arj cabextract file-roller dtc python3-pip brotli axel aria2 detox cpio lz4 python3-devel xz-devel p7zip p7zip-plugins git-lfs || abort "Setup Failed!"
+        ${SUDO} dnf install -y unace unrar zip unzip sharutils uudeview arj cabextract file-roller dtc python3-pip brotli axel aria2 detox cpio lz4 python3-devel xz-devel p7zip p7zip-plugins git-lfs zstd || abort "Setup Failed!"
 
     elif command -v pacman > /dev/null 2>&1; then
 
@@ -76,7 +76,7 @@ if [[ "$OSTYPE" == "linux-gnu" || "$OSTYPE" == "linux-musl" ]]; then
 	    echo -e ${BLUE}">> Installing Required Packages..."${NORMAL}
 	    sleep 1
 
-        ${SUDO} pacman -Sy --needed --noconfirm unace unrar p7zip sharutils uudeview arj cabextract file-roller dtc brotli axel gawk aria2 detox cpio lz4 jq git-lfs || abort "Setup Failed!"
+        ${SUDO} pacman -Sy --needed --noconfirm unace unrar p7zip sharutils uudeview arj cabextract file-roller dtc brotli axel gawk aria2 detox cpio lz4 jq git-lfs zstd || abort "Setup Failed!"
 
     elif command -v apk > /dev/null 2>&1; then
 
@@ -84,7 +84,7 @@ if [[ "$OSTYPE" == "linux-gnu" || "$OSTYPE" == "linux-musl" ]]; then
         sleep 1
         echo -e ${BLUE}">> Installing Required Packages..."${NORMAL}
         sleep 1
-        ${SUDO} apk add --no-cache zip unzip p7zip uudeview arj cabextract dtc brotli lz4 axel gawk aria2 cpio jq git-lfs rsync neofetch file libarchive-tools bash curl python3 py3-pip || abort "Setup Failed!"
+        ${SUDO} apk add --no-cache zip unzip p7zip uudeview arj cabextract dtc brotli lz4 axel gawk aria2 cpio jq git-lfs rsync neofetch file libarchive-tools bash curl python3 py3-pip zstd || abort "Setup Failed!"
 
     fi
 
@@ -94,7 +94,7 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
     sleep 1
 	echo -e ${BLUE}">> Installing Required Packages..."${NORMAL}
 	sleep 1
-    brew install protobuf xz brotli lz4 aria2 detox coreutils p7zip gawk git-lfs || abort "Setup Failed!"
+    brew install protobuf xz brotli lz4 aria2 detox coreutils p7zip gawk git-lfs zstd || abort "Setup Failed!"
 
 fi
 

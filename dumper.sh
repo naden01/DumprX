@@ -636,6 +636,8 @@ if [[ "${PUSH_ONLY}" == "false" && "${README_ONLY}" == "false" ]]; then
 		if [[ -f "${FILEPATH}" ]]; then
 			${BIN_7ZZ} x -y "${FILEPATH}" 2>/dev/null >> "${WORK_TMPDIR}"/zip.log
 		fi
+		# Transsion/Infinix firmware ships the large partitions zstd-compressed as <partition>.img.zst
+		find "${WORK_TMPDIR}" -type f -name "*.img.zst" -exec sh -c 'zstd -d -q -f "$1" -o "${1%.zst}" && rm -f "$1"' _ {} \;
 		for f in "${WORK_TMPDIR}"/*; do detox -r "${f}" 2>/dev/null; done
 		find "${WORK_TMPDIR}" -mindepth 2 -type f -name "*_image.emmc.img" | while read -r i; do mv "${i}" "${i/_image.emmc.img/.img}" 2>/dev/null; done
 		find "${WORK_TMPDIR}" -mindepth 2 -type f -name "*_new.img" | while read -r i; do mv "${i}" "${i/_new.img/.img}" 2>/dev/null; done
