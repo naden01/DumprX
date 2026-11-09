@@ -1319,6 +1319,7 @@ if [[ -z "${xosid}" ]] && { [[ -n "${xosver}" ]] || [[ -n "${transname}" ]] || [
 	xosid=$(prop_get "ro.build.display.id:product")
 fi
 [[ -n "$xosid" ]] && branch="${xosid// /-}"
+[[ -z "${branch}" ]] && branch="${codename:-${TARGET_BRANCH}}"	# some firmwares (e.g. Transsion) leave description/otaver/xosid empty
 
 for overlay in TranSettingsApkResOverlay ItelSettingsResOverlay; do
   file="product/overlay/${overlay}/${overlay}.apk"
@@ -1666,7 +1667,7 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 
 	git init		# Ensure Your GitLab Authorization Before Running This Script
 	git config http.postBuffer 524288000		# Local config only — avoids mutating user's global git config
-	git checkout -b "$TARGET_BRANCH" 2>/dev/null || git checkout "$TARGET_BRANCH"
+	git checkout -b "${branch}" 2>/dev/null || git checkout "${branch}"
 	find . \( -name "*sensetime*" -o -name "*.lic" \) | cut -d'/' -f'2-' >| .gitignore
 	[[ ! -s .gitignore ]] && rm .gitignore
 	[[ -z "$(git config --get user.email)" ]] && git config user.email "ramanarubp@gmail.com"
@@ -1789,7 +1790,7 @@ if [[ -n "${GITHUB_TOKEN}" ]]; then
 
 	git init		# Ensure your GitHub authorization before running this script
 	git config http.postBuffer 524288000		# Local config only — avoids mutating user's global git config
-	git checkout -b "$TARGET_BRANCH" 2>/dev/null || git checkout "$TARGET_BRANCH"
+	git checkout -b "${branch}" 2>/dev/null || git checkout "${branch}"
 	find . \( -name "*sensetime*" -o -name "*.lic" \) | cut -d'/' -f'2-' >| .gitignore
 	[[ ! -s .gitignore ]] && rm .gitignore
 	[[ -z "$(git config --get user.email)" ]] && git config user.email "ramanarubp@gmail.com"
