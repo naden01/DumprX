@@ -95,32 +95,14 @@ GitHub mode works like GitLab mode but pushes to github.com instead:
 > codename with a `_dump` suffix, keeping its original casing (e.g.
 > `Infinix-X6878_dump`) under `GITHUB_ORG` or your personal account.
 
-### Via CI (GitHub Actions) & GitHub Pages Web UI
+### Via CI (GitHub Actions)
 
-The `dump` workflow (`.github/workflows/dump.yml`) supports **target** (`github` or `gitlab`), **visibility** (`public` or `private`), **firmware_url**, and **requested_by**.
+The `dump` workflow has a **target** input (`gitlab` or `github`). When you pick
+`github`, set these secrets (Settings → Secrets):
 
-1. **Required Repository Secrets** (`Settings → Secrets and variables → Actions`):
-   - **Telegram** *(posts start/status/dump link to your group)*:
-     - `TG_TOKEN` — Telegram bot token
-     - `TG_CHAT` — Target Telegram group/channel ID (e.g. `-100xxxxxxxxxx`)
-     - `TG_THREAD_ID` *(optional)* — Supergroup forum topic ID
-   - **For `github` target** *(note: GitHub blocks creating secrets starting with `GITHUB_`, so use `GH_*`)*:
-     - `GH_PAT` — PAT with repo creation permissions (`public_repo` / `repo`)
-     - `GH_SSH_KEY` — Private SSH key registered on the target GitHub account
-     - `GH_ORG` *(optional)* — Target GitHub organization
-   - **For `gitlab` target**:
-     - `GITLAB_TOKEN` — GitLab PAT
-     - `GITLAB_SSH_KEY` — Private SSH key registered on your GitLab account
-     - `GITLAB_GROUP` *(optional)*, `GITLAB_INSTANCE` *(optional, defaults to `gitlab.com`)*
-
-2. **Enable GitHub Pages** (`Settings → Pages`):
-   - Set **Source** to **GitHub Actions** (deploys `docs/` via `.github/workflows/pages.yml`).
-
-3. **Enable Link-Only Mode (no GitHub token needed by users)**:
-   - Because GitHub Pages is static, browser JavaScript cannot safely embed a GitHub PAT.
-   - Deploy `worker/` to Cloudflare Workers (`cd worker && npx wrangler secret put GH_TOKEN && npx wrangler deploy`), where `GH_TOKEN` is a fine-grained PAT with `Actions: Read and write` on this repo.
-   - Set `relayUrl` in `docs/config.js` to your Worker URL and push. Visitors can then paste only a firmware URL on GitHub Pages to trigger the dump and receive the dump link in your Telegram group.
-   - Without a relay configured, the GitHub Pages UI still supports direct browser-saved PATs or opening a pre-filled `dump-request` GitHub Issue.
+- `GITHUB_TOKEN` — PAT used to create the repo via the GitHub API.
+- `GITHUB_SSH_KEY` — private key registered on the target GitHub account (the dump is pushed over SSH).
+- `GITHUB_ORG` *(optional)* — if set, repos are created under this org; otherwise your personal account is used.
 
 ## Main Scripture Credit
 

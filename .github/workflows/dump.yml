@@ -15,175 +15,30 @@ on:
         description: 'Repository visibility (GitLab or GitHub)'
         type: choice
         required: true
-        default: 'public'
+        default: 'private'
         options:
-          - public
           - private
+          - public
       firmware_url:
         description: 'Public firmware URL (overrides FIRMWARE_URL secret when set)'
         type: string
         required: false
-      requested_by:
-        description: 'Optional requester name or Telegram @handle'
-        type: string
-        required: false
-  issues:
-    types:
-      - opened
-      - labeled
-
-permissions:
-  contents: read
-  issues: write
 
 jobs:
   dump:
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (
-        github.event_name == 'issues' &&
-        contains(github.event.issue.labels.*.name, 'dump-request') &&
-        (
-          contains(github.event.issue.labels.*.name, 'dump-approved') ||
-          contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.issue.author_association)
-        )
-      )
 
     steps:
-      - name: Resolve inputs
-        id: resolve
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          INPUT_URL: ${{ inputs.firmware_url }}
-          SECRET_URL: ${{ secrets.FIRMWARE_URL }}
-          INPUT_TARGET: ${{ inputs.target }}
-          INPUT_VISIBILITY: ${{ inputs.visibility }}
-          INPUT_REQUESTED_BY: ${{ inputs.requested_by }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
-          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
-        run: |
-          python3 - <<'PY'
-          import os, re, sys
-
-          event = os.environ.get("EVENT_NAME", "")
-          url = os.environ.get("INPUT_URL", "").strip() or os.environ.get("SECRET_URL", "").strip()
-          target = (os.environ.get("INPUT_TARGET", "") or "gitlab").strip().lower()
-          visibility = (os.environ.get("INPUT_VISIBILITY", "") or "public").strip().lower()
-          requested_by = os.environ.get("INPUT_REQUESTED_BY", "").strip()
-
-          if event == "issues":
-              body = os.environ.get("ISSUE_BODY", "")
-              def parse_field(heading):
-                  m = re.search(rf"^###\s+{re.escape(heading)}\s*\r?\n+([^\r\n#]+)", body, re.MULTILINE)
-                  if not m:
-                      return ""
-                  val = m.group(1).strip()
-                  return "" if val == "_No response_" else val
-
-              parsed_url = parse_field("Firmware URL")
-              if parsed_url:
-                  url = parsed_url
-              parsed_target = parse_field("Push Target").lower()
-              if parsed_target in ("github", "gitlab"):
-                  target = parsed_target
-              parsed_vis = parse_field("Repository Visibility").lower()
-              if parsed_vis in ("public", "private"):
-                  visibility = parsed_vis
-              parsed_req = parse_field("Requested By")
-              requested_by = parsed_req or f"@{os.environ.get('ISSUE_AUTHOR', '')}".strip("@")
-              if parsed_req == "" and os.environ.get("ISSUE_AUTHOR"):
-                  requested_by = "@" + os.environ["ISSUE_AUTHOR"]
-
-          if target not in ("github", "gitlab"):
-              target = "github"
-          if visibility not in ("public", "private"):
-              visibility = "public"
-
-          if not url:
-              print("::error::firmware_url input or FIRMWARE_URL secret is required", file=sys.stderr)
-              sys.exit(1)
-          if not re.match(r"^(https?|ftp)://\S+$", url):
-              print("::error::Invalid firmware_url; must be a single http(s):// or ftp:// URL without spaces", file=sys.stderr)
-              sys.exit(1)
-
-          requested_by = re.sub(r"[\r\n]+", " ", requested_by)[:64].strip()
-
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
-              out.write(f"firmware_url={url}\n")
-              out.write(f"target={target}\n")
-              out.write(f"visibility={visibility}\n")
-              out.write(f"requested_by={requested_by}\n")
-          PY
-
-      - name: Validate secrets
-        env:
-          TARGET: ${{ steps.resolve.outputs.target }}
-          GH_PAT: ${{ secrets.GH_PAT || secrets.GH_TOKEN || secrets.DUMP_GITHUB_TOKEN }}
-          GH_SSH_KEY: ${{ secrets.GH_SSH_KEY || secrets.GITHUB_SSH_KEY }}
-          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
-          GITLAB_SSH_KEY: ${{ secrets.GITLAB_SSH_KEY }}
-        run: |
-          if [[ "${TARGET}" == "github" ]]; then
-            if [[ -z "${GH_PAT}" ]]; then
-              echo "::error::GH_PAT (or GH_TOKEN) secret is required for github target"
-              exit 1
-            fi
-            if [[ -z "${GH_SSH_KEY}" ]]; then
-              echo "::error::GH_SSH_KEY (or GITHUB_SSH_KEY) secret is required for github target"
-              exit 1
-            fi
-          else
-            if [[ -z "${GITLAB_TOKEN}" ]]; then
-              echo "::error::GITLAB_TOKEN secret is required for gitlab target"
-              exit 1
-            fi
-            if [[ -z "${GITLAB_SSH_KEY}" ]]; then
-              echo "::error::GITLAB_SSH_KEY secret is required for gitlab target"
-              exit 1
-            fi
-          fi
-
-      - name: Notify Telegram (started)
-        env:
-          TG_TOKEN: ${{ secrets.TG_TOKEN || secrets.TELEGRAM_TOKEN }}
-          TG_CHAT: ${{ secrets.TG_CHAT || secrets.TELEGRAM_CHAT_ID }}
-          TG_THREAD_ID: ${{ secrets.TG_THREAD_ID }}
-          FIRMWARE_URL: ${{ steps.resolve.outputs.firmware_url }}
-          TARGET: ${{ steps.resolve.outputs.target }}
-          VISIBILITY: ${{ steps.resolve.outputs.visibility }}
-          REQUESTED_BY: ${{ steps.resolve.outputs.requested_by }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          [[ -n "${TG_TOKEN}" ]] || exit 0
-          CHAT_ID="${TG_CHAT:-@DumprXDumps}"
-          MSG=$(python3 - <<'PY'
-          import html, os
-          url = html.escape(os.environ["FIRMWARE_URL"])
-          target = html.escape(os.environ["TARGET"])
-          vis = html.escape(os.environ["VISIBILITY"])
-          req = html.escape(os.environ.get("REQUESTED_BY", ""))
-          run_url = html.escape(os.environ["RUN_URL"])
-          lines = [
-              "🚀 <b>DumprX Dump Started</b>",
-              f"<b>Target:</b> <code>{target}</code> (<code>{vis}</code>)",
-              f"<b>Firmware URL:</b> <code>{url}</code>",
-          ]
-          if req:
-              lines.append(f"<b>Requested by:</b> <code>{req}</code>")
-          lines.append(f'<a href="{run_url}">View Workflow Logs</a>')
-          print("\n".join(lines))
-          PY
-          )
-          ARGS=(-sS --data-urlencode "text=${MSG}" --data-urlencode "chat_id=${CHAT_ID}" --data "parse_mode=HTML" --data "disable_web_page_preview=True")
-          [[ -n "${TG_THREAD_ID}" ]] && ARGS+=(--data-urlencode "message_thread_id=${TG_THREAD_ID}")
-          curl "${ARGS[@]}" "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" > /dev/null || true
-
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
         with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
           tool-cache: false
+          
+          # all of these default to true, but feel free to set to
+          # "false" if necessary for your workflow
           android: true
           dotnet: true
           haskell: true
@@ -198,10 +53,10 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
-            unace unrar zip unzip p7zip-full sharutils rar \
-            uudeview mpack arj cabextract device-tree-compiler liblzma-dev \
-            python3-pip brotli lz4 axel gawk aria2 detox cpio \
-            rename liblz4-dev jq git-lfs rsync file libarchive-tools zstd
+          unace unrar zip unzip p7zip-full sharutils rar \
+          uudeview mpack arj cabextract device-tree-compiler liblzma-dev \
+          python3-pip brotli lz4 axel gawk aria2 detox cpio \
+          rename liblz4-dev jq git-lfs rsync file libarchive-tools zstd
 
       - name: Install uv
         run: |
@@ -210,46 +65,33 @@ jobs:
 
       - name: Set up SSH
         env:
-          TARGET: ${{ steps.resolve.outputs.target }}
           GITLAB_SSH_KEY: ${{ secrets.GITLAB_SSH_KEY }}
-          GH_SSH_KEY: ${{ secrets.GH_SSH_KEY || secrets.GITHUB_SSH_KEY }}
+          GITHUB_SSH_KEY: ${{ secrets.GITHUB_SSH_KEY }}
           GITLAB_INSTANCE: ${{ secrets.GITLAB_INSTANCE || 'gitlab.com' }}
         run: |
           mkdir -p ~/.ssh
-          if [[ "${TARGET}" == "github" ]]; then
-            printf '%s\n' "${GH_SSH_KEY}" > ~/.ssh/id_dumprx
+          if [[ "${{ inputs.target }}" == "github" ]]; then
+            echo "${GITHUB_SSH_KEY}" > ~/.ssh/id_ed25519
             ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null
-            {
-              echo "Host github.com"
-              echo "  IdentityFile ~/.ssh/id_dumprx"
-              echo "  IdentitiesOnly yes"
-            } > ~/.ssh/config
             echo "Configured SSH for github.com"
           else
-            printf '%s\n' "${GITLAB_SSH_KEY}" > ~/.ssh/id_dumprx
+            echo "${GITLAB_SSH_KEY}" > ~/.ssh/id_ed25519
             ssh-keyscan -H "${GITLAB_INSTANCE}" >> ~/.ssh/known_hosts 2>/dev/null
-            {
-              echo "Host ${GITLAB_INSTANCE}"
-              echo "  IdentityFile ~/.ssh/id_dumprx"
-              echo "  IdentitiesOnly yes"
-            } > ~/.ssh/config
             echo "Configured SSH for ${GITLAB_INSTANCE}"
           fi
-          chmod 700 ~/.ssh
-          chmod 600 ~/.ssh/id_dumprx ~/.ssh/config
+          chmod 600 ~/.ssh/id_ed25519
           git config --global user.email "dumprx@github.actions"
           git config --global user.name "DumprX CI"
 
       - name: Verify SSH connection
         env:
-          TARGET: ${{ steps.resolve.outputs.target }}
           GITLAB_INSTANCE: ${{ secrets.GITLAB_INSTANCE || 'gitlab.com' }}
           GITLAB_SSH_USER: ${{ secrets.GITLAB_SSH_USER || 'git' }}
         run: |
-          if [[ "${TARGET}" == "github" ]]; then
+          if [[ "${{ inputs.target }}" == "github" ]]; then
             HOST="github.com"
             SSH_USER="git"
-            KEY_NAME="GH_SSH_KEY"
+            KEY_NAME="GITHUB_SSH_KEY"
           else
             HOST="${GITLAB_INSTANCE}"
             SSH_USER="${GITLAB_SSH_USER}"
@@ -260,6 +102,7 @@ jobs:
             echo "SSH connection successful."
           else
             exit_code=$?
+            # ssh -T returns 1 on success (remote closes), any other code is an actual error
             if [ "$exit_code" -eq 1 ]; then
               echo "SSH connection successful (exit code 1 = remote closed)."
             else
@@ -271,35 +114,60 @@ jobs:
 
       - name: Write .dumprxenv
         env:
-          TARGET: ${{ steps.resolve.outputs.target }}
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
           GITLAB_INSTANCE: ${{ secrets.GITLAB_INSTANCE || 'gitlab.com' }}
           GITLAB_GROUP: ${{ secrets.GITLAB_GROUP }}
-          GITHUB_TOKEN: ${{ secrets.GH_PAT || secrets.GH_TOKEN || secrets.DUMP_GITHUB_TOKEN }}
-          GITHUB_ORG: ${{ secrets.GH_ORG || secrets.GITHUB_ORG }}
-          TG_TOKEN: ${{ secrets.TG_TOKEN || secrets.TELEGRAM_TOKEN }}
-          TG_CHAT: ${{ secrets.TG_CHAT || secrets.TELEGRAM_CHAT_ID }}
-          TG_THREAD_ID: ${{ secrets.TG_THREAD_ID }}
-          REQUESTED_BY: ${{ steps.resolve.outputs.requested_by }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ORG: ${{ secrets.GITHUB_ORG }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT: ${{ secrets.TG_CHAT }}
         run: |
-          python3 - <<'PY'
-          import os, shlex
+          if [[ "${{ inputs.target }}" == "github" ]]; then
+            {
+              echo "export GITHUB_TOKEN=\"${GITHUB_TOKEN}\""
+              echo "export GITHUB_ORG=\"${GITHUB_ORG}\""
+              echo "export TG_TOKEN=\"${TG_TOKEN}\""
+              echo "export TG_CHAT=\"${TG_CHAT}\""
+            } > .dumprxenv
+          else
+            {
+              echo "export GITLAB_TOKEN=\"${GITLAB_TOKEN}\""
+              echo "export GITLAB_INSTANCE=\"${GITLAB_INSTANCE}\""
+              echo "export GITLAB_GROUP=\"${GITLAB_GROUP}\""
+              echo "export TG_TOKEN=\"${TG_TOKEN}\""
+              echo "export TG_CHAT=\"${TG_CHAT}\""
+            } > .dumprxenv
+          fi
 
-          keys = ["TG_TOKEN", "TG_CHAT", "TG_THREAD_ID", "REQUESTED_BY"]
-          if os.environ.get("TARGET") == "github":
-              keys = ["GITHUB_TOKEN", "GITHUB_ORG"] + keys
-          else:
-              keys = ["GITLAB_TOKEN", "GITLAB_INSTANCE", "GITLAB_GROUP"] + keys
-
-          with open(".dumprxenv", "w", encoding="utf-8") as f:
-              for k in keys:
-                  v = os.environ.get(k, "")
-                  f.write(f"export {k}={shlex.quote(v)}\n")
-          PY
+      - name: Validate inputs
+        run: |
+          if [[ -z "${{ inputs.firmware_url }}" && -z "${{ secrets.FIRMWARE_URL }}" ]]; then
+            echo "::error::firmware_url input or FIRMWARE_URL secret is required"
+            exit 1
+          fi
+          if [[ "${{ inputs.target }}" == "github" ]]; then
+            if [[ -z "${{ secrets.GITHUB_TOKEN }}" ]]; then
+              echo "::error::GITHUB_TOKEN secret is required for github target"
+              exit 1
+            fi
+            if [[ -z "${{ secrets.GITHUB_SSH_KEY }}" ]]; then
+              echo "::error::GITHUB_SSH_KEY secret is required for github target"
+              exit 1
+            fi
+          else
+            if [[ -z "${{ secrets.GITLAB_TOKEN }}" ]]; then
+              echo "::error::GITLAB_TOKEN secret is required"
+              exit 1
+            fi
+            if [[ -z "${{ secrets.GITLAB_SSH_KEY }}" ]]; then
+              echo "::error::GITLAB_SSH_KEY secret is required"
+              exit 1
+            fi
+          fi
 
       - name: Extract firmware (local mode)
         env:
-          FIRMWARE_URL: ${{ steps.resolve.outputs.firmware_url }}
+          FIRMWARE_URL: ${{ inputs.firmware_url || secrets.FIRMWARE_URL }}
         run: |
           chmod +x dumper.sh
           ./dumper.sh -l "${FIRMWARE_URL}"
@@ -312,79 +180,23 @@ jobs:
             echo "Deleting: $apk"
             sudo rm -f "$apk"
           done
+          # Remove empty directories (abaikan folder lost+found)
           sudo find /tmp/out -type d -empty ! -path "*/lost+found*" -delete
           df -h /tmp/out | tail -1
 
       - name: Push firmware
         env:
-          TARGET: ${{ steps.resolve.outputs.target }}
-          VISIBILITY: ${{ steps.resolve.outputs.visibility }}
+          TARGET: ${{ inputs.target }}
+          # when we dont know
           VENDOR: "Generic"
         run: |
-          PUBLIC_FLAG=""
-          if [[ "${VISIBILITY}" == "public" ]]; then
-            PUBLIC_FLAG="--public"
-          fi
+          PUBLIC_FLAG="${{ inputs.visibility == 'public' && '--public' || '' }}"
+          
+          # Inject nilai default ke environment jika variabel manufacturer kosong
           export MANUFACTURER="${MANUFACTURER:-Generic}"
+          
           if [[ "${TARGET}" == "github" ]]; then
-            ./dumper.sh -b -p ${PUBLIC_FLAG}
+            ./dumper.sh -b -p $PUBLIC_FLAG
           else
-            ./dumper.sh -g -p ${PUBLIC_FLAG}
+            ./dumper.sh -g -p $PUBLIC_FLAG
           fi
-
-      - name: Notify Telegram (failed)
-        if: failure()
-        env:
-          TG_TOKEN: ${{ secrets.TG_TOKEN || secrets.TELEGRAM_TOKEN }}
-          TG_CHAT: ${{ secrets.TG_CHAT || secrets.TELEGRAM_CHAT_ID }}
-          TG_THREAD_ID: ${{ secrets.TG_THREAD_ID }}
-          FIRMWARE_URL: ${{ steps.resolve.outputs.firmware_url }}
-          REQUESTED_BY: ${{ steps.resolve.outputs.requested_by }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          [[ -n "${TG_TOKEN}" ]] || exit 0
-          [[ -f /tmp/out/.already_dumped ]] && exit 0
-          CHAT_ID="${TG_CHAT:-@DumprXDumps}"
-          MSG=$(python3 - <<'PY'
-          import html, os
-          url = html.escape(os.environ.get("FIRMWARE_URL", "unknown"))
-          req = html.escape(os.environ.get("REQUESTED_BY", ""))
-          run_url = html.escape(os.environ["RUN_URL"])
-          lines = [
-              "❌ <b>DumprX Dump Failed</b>",
-              f"<b>Firmware URL:</b> <code>{url}</code>",
-          ]
-          if req:
-              lines.append(f"<b>Requested by:</b> <code>{req}</code>")
-          lines.append(f'<a href="{run_url}">Inspect Workflow Logs</a>')
-          print("\n".join(lines))
-          PY
-          )
-          ARGS=(-sS --data-urlencode "text=${MSG}" --data-urlencode "chat_id=${CHAT_ID}" --data "parse_mode=HTML" --data "disable_web_page_preview=True")
-          [[ -n "${TG_THREAD_ID}" ]] && ARGS+=(--data-urlencode "message_thread_id=${TG_THREAD_ID}")
-          curl "${ARGS[@]}" "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" > /dev/null || true
-
-      - name: Comment on trigger issue
-        if: always() && github.event_name == 'issues'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const status = "${{ job.status }}";
-            const body = status === "success"
-              ? `✅ Firmware dump completed! Check the Telegram group or [workflow logs](${runUrl}) for the dump link.`
-              : `❌ Firmware dump finished with status **${status}**. See [workflow logs](${runUrl}).`;
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body,
-            });
-            if (status === "success") {
-              await github.rest.issues.update({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                state: "closed",
-              });
-            }

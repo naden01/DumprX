@@ -1643,40 +1643,6 @@ if [[ "${MODE}" == "gitlab" || "${MODE}" == "github" ]]; then
 		retry_push -u origin "${branch}" || exit 1
 	}
 
-	html_escape() {
-		local s="$1"
-		shopt -u patsub_replacement 2>/dev/null || true
-		s=${s//&/&amp;}
-		s=${s//</&lt;}
-		s=${s//>/&gt;}
-		printf '%s' "$s"
-	}
-
-	send_telegram_message() {
-		local msg="$1"
-		[[ -n "${TG_TOKEN:-}" ]] || return 0
-		local chat_id="${TG_CHAT:-@DumprXDumps}"
-		local curl_args=(
-			-sS
-			--data-urlencode "text=${msg}"
-			--data-urlencode "chat_id=${chat_id}"
-			--data "parse_mode=HTML"
-			--data "disable_web_page_preview=True"
-		)
-		if [[ -n "${TG_THREAD_ID:-}" ]]; then
-			curl_args+=(--data-urlencode "message_thread_id=${TG_THREAD_ID}")
-		fi
-		local resp
-		if ! resp=$(curl "${curl_args[@]}" "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" 2>/dev/null); then
-			printf "Telegram Notification Sending Error.\n"
-			return 1
-		fi
-		if [[ "$(printf '%s' "${resp}" | jq -r '.ok // false' 2>/dev/null)" != "true" ]]; then
-			printf "Telegram API error: %s\n" "$(printf '%s' "${resp}" | jq -r '.description // "unknown error"' 2>/dev/null)"
-			return 1
-		fi
-	}
-
 	if [[ "${MODE}" == "gitlab" ]]; then
 if [[ -n "${GITLAB_TOKEN}" ]]; then
 
@@ -1690,13 +1656,7 @@ if [[ -n "${GITLAB_TOKEN}" ]]; then
 	GITLAB_HOST="https://${GITLAB_INSTANCE}"
 
 	# Check if already dumped or not
-	if [[ $(curl -sL "${GITLAB_HOST}/${GIT_ORG}/${repo}/-/raw/${branch}/all_files.txt" | grep "all_files.txt") ]]; then
-		EXISTING_URL="https://${GITLAB_INSTANCE}/${GIT_ORG}/${repo}/-/tree/${branch}"
-		printf "Firmware already dumped!\nGo to %s\n" "${EXISTING_URL}"
-		touch "${OUTDIR}/.already_dumped" 2>/dev/null || true
-		send_telegram_message "$(printf 'ℹ️ <b>Firmware already dumped!</b>\n<b>Brand:</b> <code>%s</code>\n<b>Model:</b> <code>%s</code>\n<a href="%s">GitLab Tree</a>' "$(html_escape "${manufacturer}")" "$(html_escape "${codename}")" "$(html_escape "${EXISTING_URL}")")" || true
-		exit 1
-	fi
+	[[ $(curl -sL "${GITLAB_HOST}/${GIT_ORG}/${repo}/-/raw/${branch}/all_files.txt" | grep "all_files.txt") ]] && { printf "Firmware already dumped!\nGo to https://%s/%s/%s/-/tree/%s\n" "${GITLAB_INSTANCE}" "${GIT_ORG}" "${repo}" "${branch}" && exit 1; }
 
 	cleanup_bloat
 
@@ -1819,13 +1779,7 @@ if [[ -n "${GITHUB_TOKEN}" ]]; then
 	fi
 
 	# Check if already dumped or not
-	if [[ $(curl -sL "https://raw.githubusercontent.com/${GIT_ORG}/${GH_REPO}/${branch}/all_files.txt" | grep "all_files.txt") ]]; then
-		EXISTING_URL="https://github.com/${GIT_ORG}/${GH_REPO}/tree/${branch}"
-		printf "Firmware already dumped!\nGo to %s\n" "${EXISTING_URL}"
-		touch "${OUTDIR}/.already_dumped" 2>/dev/null || true
-		send_telegram_message "$(printf 'ℹ️ <b>Firmware already dumped!</b>\n<b>Brand:</b> <code>%s</code>\n<b>Model:</b> <code>%s</code>\n<a href="%s">GitHub Tree</a>' "$(html_escape "${manufacturer}")" "$(html_escape "${codename}")" "$(html_escape "${EXISTING_URL}")")" || true
-		exit 1
-	fi
+	[[ $(curl -sL "https://raw.githubusercontent.com/${GIT_ORG}/${GH_REPO}/${branch}/all_files.txt" | grep "all_files.txt") ]] && { printf "Firmware already dumped!\nGo to https://github.com/%s/%s/tree/%s\n" "${GIT_ORG}" "${GH_REPO}" "${branch}" && exit 1; }
 
 	cleanup_bloat
 
@@ -1892,45 +1846,49 @@ fi
 
 # Telegram channel post (shared by GitLab and GitHub modes once a push succeeded)
 	if [[ -n "${TG_TOKEN}" ]]; then
-		printf "Sending telegram notification...\n"
-		printf "<blockquote><b>FIRMWARE DUMP INFO</b></blockquote>" >| "${OUTDIR}"/tg.html
-		{
-			printf "\n<b>Brand: %s</b>" "<code>$(html_escape "${manufacturer}")</code>"
-			printf "\n<b>Model: %s</b>" "<code>$(html_escape "${codename}")</code>"
-			[ ! -z "${transname}" ] && printf "\n<b>Transsion name: %s</b>" "<code>$(html_escape "${transname}")</code>"
-			[ ! -z "${xiaominame}" ] && printf "\n<b>Xiaomi name: %s</b>" "<code>$(html_escape "${xiaominame}")</code>"
-			[ ! -z "${motoname}" ] && printf "\n<b>Moto name: %s</b>" "<code>$(html_escape "${motoname}")</code>"
-			[ ! -z "${opname}" ] && printf "\n<b>OP name: %s</b>" "<code>$(html_escape "${opname}")</code>"
-			[ ! -z "${region}" ] && printf "\n<b>Region: %s</b>" "<code>$(html_escape "${region}")</code>"
-			printf "\n<b>Platform: %s</b>" "<code>$(html_escape "${platform}${ts_chipset}")</code>"
-			printf "\n<b>Android ver: %s</b>" "<code>$(html_escape "${release}")</code>"
-			[ ! -z "${first_api_level}" ] && printf "\n<b>First API: %s</b>" "<code>$(html_escape "${first_api_level}")</code>"
-			[ ! -z "${xosid}" ] && printf "\n<b>TranOS build: %s</b>" "<code>$(html_escape "${xosid}")</code>"
-			[ ! -z "${xosver}" ] && printf "\n<b>TranOS ver: %s</b>" "<code>$(html_escape "${xosver}")</code>"
-			if [ -n "${oplus_ver}" ]; then
-				case "${manufacturer,,}" in
-					realme) printf "\n<b>RealmeUI ver: %s</b>" "<code>$(html_escape "${oplus_ver}")</code>" ;;
-					oneplus) printf "\n<b>OxygenOS ver: %s</b>" "<code>$(html_escape "${oplus_ver}")</code>" ;;
-					*) printf "\n<b>ColorOS ver: %s</b>" "<code>$(html_escape "${oplus_ver}")</code>" ;;
-				esac
-			fi
-			[ ! -z "${miui_ver}" ] && printf "\n<b>HyperOS/MIUI ver: %s</b>" "<code>$(html_escape "${miui_ver}")</code>"
-			[ ! -z "${oneui_ver}" ] && printf "\n<b>One UI ver: %s</b>" "<code>$(html_escape "${oneui_ver}")</code>"
-			[ ! -z "${vivo_ver}" ] && printf "\n<b>Vivo OS ver: %s</b>" "<code>$(html_escape "${vivo_ver}")</code>"
-			printf "\n<b>Android build: %s</b>" "<code>$(html_escape "${id}")</code>"
-			[ ! -z "${display_id}" ] && [ "${display_id}" != "${id}" ] && printf "\n<b>Display build: %s</b>" "<code>$(html_escape "${display_id}")</code>"
-			printf "\n<b>Security patch: %s</b>" "<code>$(html_escape "${sec_patch}")</code>"
-			[ ! -z "${date}" ] && printf "\n<b>Build date: %s</b>" "<code>$(html_escape "${date}")</code>"
-			[ ! -z "${kernel_version}" ] && printf "\n<b>Kernel ver: %s</b>" "<code>$(html_escape "${kernel_version}")</code>"
-			[ ! -z "${abilist}" ] && printf "\n<b>CPU abilist: %s</b>" "<code>$(html_escape "${abilist}")</code>"
-			printf "\n<b>Fingerprint: %s</b>" "<code>$(html_escape "${fingerprint}")</code>"
-			[ ! -z "${REQUESTED_BY:-}" ] && printf "\n<b>Requested by: %s</b>" "<code>$(html_escape "${REQUESTED_BY}")</code>"
-			[ ! -z "${REPO_TREE_URL}" ] && printf "\n<a href=\"%s\">%s</a>" "$(html_escape "${REPO_TREE_URL}")" "$(html_escape "${REPO_TREE_LABEL:-Repository Tree}")"
-		} >> "${OUTDIR}"/tg.html
-		TEXT=$(< "${OUTDIR}"/tg.html)
-		rm -rf "${OUTDIR}"/tg.html
-		send_telegram_message "${TEXT}" || true
+	if [[ -n "${TG_CHAT}" ]]; then		# TG Channel ID
+		CHAT_ID="${TG_CHAT}"
+	else
+		CHAT_ID="@DumprXDumps"
 	fi
+	printf "Sending telegram notification...\n"
+	printf "<blockquote><b>FIRMWARE DUMP INFO</b></blockquote>" >| "${OUTDIR}"/tg.html
+	{
+		printf "\n<b>Brand: %s</b>" "<code>${manufacturer}</code>"
+		printf "\n<b>Model: %s</b>" "<code>${codename}</code>"
+		[ ! -z "${transname}" ] && printf "\n<b>Transsion name: %s</b>" "<code>${transname}</code>"
+		[ ! -z "${xiaominame}" ] && printf "\n<b>Xiaomi name: %s</b>" "<code>${xiaominame}</code>"
+		[ ! -z "${motoname}" ] && printf "\n<b>Moto name: %s</b>" "<code>${motoname}</code>"
+		[ ! -z "${opname}" ] && printf "\n<b>OP name: %s</b>" "<code>${opname}</code>"
+		[ ! -z "${region}" ] && printf "\n<b>Region: %s</b>" "<code>${region}</code>"
+		printf "\n<b>Platform: %s</b>" "<code>${platform}${ts_chipset}</code>"
+		printf "\n<b>Android ver: %s</b>" "<code>${release}</code>"
+		[ ! -z "${first_api_level}" ] && printf "\n<b>First API: %s</b>" "<code>${first_api_level}</code>"
+		[ ! -z "${xosid}" ] && printf "\n<b>TranOS build: %s</b>" "<code>${xosid}</code>"
+		[ ! -z "${xosver}" ] && printf "\n<b>TranOS ver: %s</b>" "<code>${xosver}</code>"
+		if [ -n "${oplus_ver}" ]; then
+			case "${manufacturer,,}" in
+				realme) printf "\n<b>RealmeUI ver: %s</b>" "<code>${oplus_ver}</code>" ;;
+				oneplus) printf "\n<b>OxygenOS ver: %s</b>" "<code>${oplus_ver}</code>" ;;
+				*) printf "\n<b>ColorOS ver: %s</b>" "<code>${oplus_ver}</code>" ;;
+			esac
+		fi
+		[ ! -z "${miui_ver}" ] && printf "\n<b>HyperOS/MIUI ver: %s</b>" "<code>${miui_ver}</code>"
+		[ ! -z "${oneui_ver}" ] && printf "\n<b>One UI ver: %s</b>" "<code>${oneui_ver}</code>"
+		[ ! -z "${vivo_ver}" ] && printf "\n<b>Vivo OS ver: %s</b>" "<code>${vivo_ver}</code>"
+		printf "\n<b>Android build: %s</b>" "<code>${id}</code>"
+		[ ! -z "${display_id}" ] && [ "${display_id}" != "${id}" ] && printf "\n<b>Display build: %s</b>" "<code>${display_id}</code>"
+		printf "\n<b>Security patch: %s</b>" "<code>${sec_patch}</code>"
+		[ ! -z "${date}" ] && printf "\n<b>Build date: %s</b>" "<code>${date}</code>"
+		[ ! -z "${kernel_version}" ] && printf "\n<b>Kernel ver: %s</b>" "<code>${kernel_version}</code>"
+		[ ! -z "${abilist}" ] && printf "\n<b>CPU abilist: %s</b>" "<code>${abilist}</code>"
+		printf "\n<b>Fingerprint: %s</b>" "<code>${fingerprint}</code>"
+		[ ! -z "${REPO_TREE_URL}" ] && printf "\n<a href=\"%s\">%s</a>" "${REPO_TREE_URL}" "${REPO_TREE_LABEL:-Repository Tree}"
+	} >> "${OUTDIR}"/tg.html
+	TEXT=$(< "${OUTDIR}"/tg.html)
+	rm -rf "${OUTDIR}"/tg.html
+	curl -s "https://api.telegram.org/bot${TG_TOKEN}/sendmessage" --data "text=${TEXT}&chat_id=${CHAT_ID}&parse_mode=HTML&disable_web_page_preview=True" || printf "Telegram Notification Sending Error.\n"
+fi
 
 else
 	printf "Dumping done locally.\n"
