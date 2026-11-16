@@ -7,10 +7,10 @@ on:
         description: 'Where to push the dump'
         type: choice
         required: true
-        default: 'github'
+        default: 'gitlab'
         options:
-          - github
           - gitlab
+          - github
       visibility:
         description: 'Repository visibility (GitLab or GitHub)'
         type: choice
@@ -69,7 +69,7 @@ jobs:
 
           event = os.environ.get("EVENT_NAME", "")
           url = os.environ.get("INPUT_URL", "").strip() or os.environ.get("SECRET_URL", "").strip()
-          target = (os.environ.get("INPUT_TARGET", "") or "github").strip().lower()
+          target = (os.environ.get("INPUT_TARGET", "") or "gitlab").strip().lower()
           visibility = (os.environ.get("INPUT_VISIBILITY", "") or "public").strip().lower()
           requested_by = os.environ.get("INPUT_REQUESTED_BY", "").strip()
 
@@ -147,8 +147,8 @@ jobs:
 
       - name: Notify Telegram (started)
         env:
-          TG_TOKEN: ${{ secrets.TG_TOKEN }}
-          TG_CHAT: ${{ secrets.TG_CHAT }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN || secrets.TELEGRAM_TOKEN }}
+          TG_CHAT: ${{ secrets.TG_CHAT || secrets.TELEGRAM_CHAT_ID }}
           TG_THREAD_ID: ${{ secrets.TG_THREAD_ID }}
           FIRMWARE_URL: ${{ steps.resolve.outputs.firmware_url }}
           TARGET: ${{ steps.resolve.outputs.target }}
@@ -277,8 +277,8 @@ jobs:
           GITLAB_GROUP: ${{ secrets.GITLAB_GROUP }}
           GITHUB_TOKEN: ${{ secrets.GH_PAT || secrets.GH_TOKEN || secrets.DUMP_GITHUB_TOKEN }}
           GITHUB_ORG: ${{ secrets.GH_ORG || secrets.GITHUB_ORG }}
-          TG_TOKEN: ${{ secrets.TG_TOKEN }}
-          TG_CHAT: ${{ secrets.TG_CHAT }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN || secrets.TELEGRAM_TOKEN }}
+          TG_CHAT: ${{ secrets.TG_CHAT || secrets.TELEGRAM_CHAT_ID }}
           TG_THREAD_ID: ${{ secrets.TG_THREAD_ID }}
           REQUESTED_BY: ${{ steps.resolve.outputs.requested_by }}
         run: |
@@ -335,8 +335,8 @@ jobs:
       - name: Notify Telegram (failed)
         if: failure()
         env:
-          TG_TOKEN: ${{ secrets.TG_TOKEN }}
-          TG_CHAT: ${{ secrets.TG_CHAT }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN || secrets.TELEGRAM_TOKEN }}
+          TG_CHAT: ${{ secrets.TG_CHAT || secrets.TELEGRAM_CHAT_ID }}
           TG_THREAD_ID: ${{ secrets.TG_THREAD_ID }}
           FIRMWARE_URL: ${{ steps.resolve.outputs.firmware_url }}
           REQUESTED_BY: ${{ steps.resolve.outputs.requested_by }}

@@ -14,7 +14,7 @@ window.DUMPRX_CONFIG = {
   relayUrl: "",
 
   // Default form selections
-  defaultTarget: "github", // "github" or "gitlab"
+  defaultTarget: "gitlab", // "gitlab" or "github"
   defaultVisibility: "public", // "public" or "private"
 
   // Optional: Telegram group link shown in the UI so users know where dump links arrive
