@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DumprX — Firmware Dumper CI</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+  <main class="container">
+    <header class="hero">
+      <div class="badge-row">
+        <span class="badge badge-accent">DumprX CI</span>
+        <span id="repo-badge" class="badge badge-muted">naden01/DumprX</span>
+        <span id="mode-badge" class="badge badge-warn">Setup needed for link-only mode</span>
+      </div>
+      <h1>Android Firmware Dumper</h1>
+      <p class="subtitle">
+        Paste a firmware download link below to trigger GitHub Actions extraction, push the dump repository,
+        and post the dump link automatically to the configured Telegram group.
+      </p>
+      <div id="tg-banner" class="tg-banner hidden">
+        <span>Dump links &amp; device info are posted to:</span>
+        <a id="tg-link" href="#" target="_blank" rel="noopener noreferrer">Telegram Group</a>
+      </div>
+    </header>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>Submit Firmware Link</h2>
+        <span class="hint">TG token &amp; chat ID are configured securely on the server</span>
+      </div>
+
+      <form id="dump-form" novalidate>
+        <div class="field">
+          <label for="firmware-url">Firmware Download URL <span class="req">*</span></label>
+          <input
+            id="firmware-url"
+            name="firmware_url"
+            type="url"
+            required
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="https://example.com/firmware.zip (or mega.nz / mediafire / drive.google.com / androidfilehost / 1drv.ms)"
+          >
+          <small class="field-help">
+            Supported: Direct HTTP/HTTPS/FTP links, Google Drive, Mega.nz, MediaFire, AndroidFileHost, OneDrive.
+          </small>
+        </div>
+
+        <div class="row-2">
+          <div class="field">
+            <label for="target">Push Target</label>
+            <select id="target" name="target">
+              <option value="github">GitHub</option>
+              <option value="gitlab">GitLab</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="visibility">Repository Visibility</label>
+            <select id="visibility" name="visibility">
+              <option value="public">Public (recommended for group links)</option>
+              <option value="private">Private</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row-2">
+          <div class="field">
+            <label for="requested-by">Requested By <span class="opt">(optional)</span></label>
+            <input
+              id="requested-by"
+              name="requested_by"
+              type="text"
+              maxlength="64"
+              placeholder="@telegram_handle or note"
+            >
+          </div>
+          <div id="pin-field" class="field hidden">
+            <label for="access-pin">Relay PIN <span class="opt">(if enabled by owner)</span></label>
+            <input
+              id="access-pin"
+              name="pin"
+              type="password"
+              autocomplete="off"
+              placeholder="Optional PIN"
+            >
+          </div>
+        </div>
+
+        <div id="direct-auth-box" class="auth-box hidden">
+          <div class="auth-box-head">
+            <strong>Trigger Method</strong>
+            <span class="hint">No relay configured in <code>docs/config.js</code></span>
+          </div>
+          <p class="auth-desc">
+            To let anyone dump with only a firmware link, deploy the included <code>worker/</code> relay and set <code>relayUrl</code> in <code>docs/config.js</code>.
+            Meanwhile, you can trigger directly using your own GitHub PAT (stored only in this browser) or open a pre-filled GitHub Issue.
+          </p>
+          <div class="field">
+            <label for="gh-pat">GitHub Fine-Grained PAT <span class="opt">(<code>Actions: Read &amp; Write</code>)</span></label>
+            <div class="inline-input">
+              <input
+                id="gh-pat"
+                type="password"
+                autocomplete="off"
+                placeholder="github_pat_... (stored locally in browser)"
+              >
+              <button type="button" id="clear-pat-btn" class="btn btn-ghost btn-sm">Clear</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="custom-relay">Or Relay Worker URL <span class="opt">(saved in browser)</span></label>
+            <input
+              id="custom-relay"
+              type="url"
+              autocomplete="off"
+              placeholder="https://dumprx-relay.your-subdomain.workers.dev"
+            >
+          </div>
+        </div>
+
+        <div class="actions">
+          <button type="submit" id="submit-btn" class="btn btn-primary">
+            <span class="btn-label">Start Firmware Dump</span>
+          </button>
+          <button type="button" id="issue-btn" class="btn btn-secondary">
+            Open as GitHub Issue
+          </button>
+        </div>
+      </form>
+
+      <div id="status-box" class="status-box hidden" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>Recent Dump Jobs</h2>
+        <div class="header-actions">
+          <a id="actions-link" class="link-btn" href="#" target="_blank" rel="noopener noreferrer">All Workflows ↗</a>
+          <button type="button" id="refresh-runs-btn" class="btn btn-ghost btn-sm">Refresh</button>
+        </div>
+      </div>
+      <div id="runs-list" class="runs-list">
+        <p class="muted">Loading recent workflow runs…</p>
+      </div>
+    </section>
+
+    <details class="card setup-card">
+      <summary>Supported Formats &amp; Owner Setup Guide</summary>
+      <div class="setup-body">
+        <h3>Supported Firmware Inputs</h3>
+        <p class="muted">
+          <code>.zip</code>, <code>.rar</code>, <code>.7z</code>, <code>.tar</code>, <code>.tar.gz</code>, <code>.tgz</code>, <code>.tar.md5</code>,
+          <code>.ozip</code>, <code>.ofp</code>, <code>.ops</code>, <code>.kdz</code>, <code>ruu_*.exe</code>,
+          <code>payload.bin</code>, <code>super.img</code>, <code>UPDATE.APP</code>, <code>.pac</code>, <code>.nb0</code>, <code>.sin</code>, <code>system.new.dat*</code>, <code>*.img.zst</code>
+        </p>
+
+        <h3>Owner Setup Checklist</h3>
+        <ol>
+          <li>In GitHub Repo <strong>Settings → Secrets and variables → Actions</strong>, set <code>TG_TOKEN</code> and <code>TG_CHAT</code> (plus <code>GH_PAT</code> &amp; <code>GH_SSH_KEY</code> for GitHub pushes, or <code>GITLAB_TOKEN</code> &amp; <code>GITLAB_SSH_KEY</code> for GitLab).</li>
+          <li>In <strong>Settings → Pages</strong>, set Source to <strong>GitHub Actions</strong>.</li>
+          <li>To allow users to trigger dumps with <strong>only a firmware link</strong> (no GitHub login or PAT), deploy <code>worker/</code> to Cloudflare Workers (<code>npx wrangler secret put GH_TOKEN</code> &amp;&amp; <code>npx wrangler deploy</code>) and set <code>relayUrl</code> in <code>docs/config.js</code>.</li>
+        </ol>
+      </div>
+    </details>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
